@@ -1101,6 +1101,7 @@ region save
 - `source`:
   - `logRx`: bridges received packets
   - `logTx`: bridges transmitted packets
+  - `logBoth`: bridges both transmitted and received packets
 
 **Default:** `logTx`
 

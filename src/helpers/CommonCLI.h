@@ -10,6 +10,8 @@
 
 #if defined(WITH_RS232_BRIDGE) || defined(WITH_ESPNOW_BRIDGE) || defined(WITH_MQTT_BRIDGE)
 #define WITH_BRIDGE
+#define BRIDGE_SOURCE_RX  0x01
+#define BRIDGE_SOURCE_TX  0x02
 #endif
 
 #define ADVERT_LOC_NONE       0
@@ -246,7 +248,7 @@ public:
   #if defined(USE_LR2021)
   virtual bool configSideDetectors(const uint8_t sideDetSFs[], uint8_t num, float bw) {
     return false; // Override in wrapper
-  } 
+  }
   #endif
 };
 
