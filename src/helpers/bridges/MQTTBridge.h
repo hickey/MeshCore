@@ -19,6 +19,7 @@
 #include "helpers/bridges/BridgeBase.h"
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <Mesh.h>
 
 #if MQTT_DEBUG && ARDUINO
   #define MQTT_DEBUG_PRINTLN(F, ...) Serial.printf("%s MQTT: " F "\n", getLogDateTime(), ##__VA_ARGS__)
@@ -65,10 +66,12 @@ public:
   void onPacketReceived(mesh::Packet *packet) override;
   void initialize();
   bool reconnect();
+  void setMesh(mesh::Mesh *mesh) { _mesh = mesh; }
 
 private:
   static MQTTBridge *_instance;
 
+  mesh::Mesh *_mesh;
   WiFiClient _wifiClient;
   PubSubClient _mqttClient;
   unsigned long _lastReconnectAttempt;
