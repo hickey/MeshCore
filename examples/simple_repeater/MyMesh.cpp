@@ -885,6 +885,10 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
   region_load_active = false;
   recv_pkt_region = NULL;
 
+#ifdef WITH_MQTT_BRIDGE
+  bridge.setMesh(this);
+#endif
+
 #if MAX_NEIGHBOURS
   memset(neighbours, 0, sizeof(neighbours));
 #endif

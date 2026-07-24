@@ -19,7 +19,7 @@
 MQTTBridge *MQTTBridge::_instance = nullptr;
 
 MQTTBridge::MQTTBridge(NodePrefs *prefs, mesh::PacketManager *mgr, mesh::RTCClock *rtc, const uint8_t *pubKey)
-    : BridgeBase(prefs, mgr, rtc), _mqttClient(_wifiClient), _lastReconnectAttempt(0), _pubKey(pubKey) {
+    : BridgeBase(prefs, mgr, rtc), _mesh(nullptr), _mqttClient(_wifiClient), _lastReconnectAttempt(0), _pubKey(pubKey) {
   _instance = this;
 }
 
@@ -118,7 +118,7 @@ void MQTTBridge::sendPacket(mesh::Packet *packet) {
 
   if (!_mqttClient.connected()) return;
 
-  if (!_seen_packets.hasSeen(packet)) {
+  if (!_seen_packets.wasSeen(packet)) {
     uint8_t buf[MAX_TRANS_UNIT + 1];
     uint16_t len = packet->writeTo(buf);
 
@@ -137,6 +137,7 @@ void MQTTBridge::sendPacket(mesh::Packet *packet) {
 
     if (_mqttClient.publish(mqtt_topic, _hexBuf)) {
       MQTT_DEBUG_PRINTLN("PUB raw=%s", _hexBuf);
+      _seen_packets.markSeen(packet);
     } else {
       MQTT_DEBUG_PRINTLN("PUB failed len=%d", len);
     }
@@ -144,6 +145,25 @@ void MQTTBridge::sendPacket(mesh::Packet *packet) {
 }
 
 void MQTTBridge::onPacketReceived(mesh::Packet *packet) {
+  // Zero-hop adverts (ROUTE_TYPE_DIRECT, path_len == 0) from other nodes must
+  // be transmitted over radio as zero-hop so only nearby radio nodes receive
+  // them. The normal queueInbound path won't do this — routeRecvPacket() only
+  // retransmits flood packets. Call sendZeroHop() directly instead.
+  if (_mesh
+      && packet->getPayloadType() == PAYLOAD_TYPE_ADVERT
+      && packet->isRouteDirect()
+      && packet->path_len == 0
+      && packet->payload_len >= PUB_KEY_SIZE
+      && memcmp(packet->payload, _pubKey, PUB_KEY_SIZE) != 0) {
+    if (!_seen_packets.wasSeen(packet)) {
+      _seen_packets.markSeen(packet);
+      MQTT_DEBUG_PRINTLN("SUB zero-hop advert → sendZeroHop");
+      _mesh->sendZeroHop(packet);
+    } else {
+      _mgr->free(packet);
+    }
+    return;
+  }
   handleReceivedPacket(packet);
 }
 
@@ -195,10 +215,10 @@ void MQTTBridge::onMqttMessage(char *topic, uint8_t *payload, unsigned int lengt
   }
 
   if (pkt->readFrom(buf, byte_len)) {
-    if (_seen_packets.hasSeen(pkt)) {
+    if (_seen_packets.wasSeen(pkt)) {
       _mgr->free(pkt);
     } else {
-      MQTT_DEBUG_PRINTLN("SUB raw=%.*s", payload);
+      MQTT_DEBUG_PRINTLN("SUB raw=%.*s", (int)length, payload);
       onPacketReceived(pkt);
     }
   } else {
