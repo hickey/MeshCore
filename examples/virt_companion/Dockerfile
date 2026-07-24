@@ -2,14 +2,14 @@
 #   docker build -f examples/virt_companion/Dockerfile .
 
 # Build stage
-FROM debian:bookworm-slim AS builder
+FROM alpine:3.20 AS builder
 
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
     cmake \
-    build-essential \
+    make \
+    g++ \
     git \
-    libmosquitto-dev \
-    && rm -rf /var/lib/apt/lists/*
+    mosquitto-dev
 
 WORKDIR /src
 COPY . .
@@ -21,11 +21,12 @@ RUN cmake \
     && cmake --build build/virt_companion -j$(nproc)
 
 # Runtime stage
-FROM debian:bookworm-slim
+FROM alpine:3.20
 
-RUN apt-get update && apt-get install -y \
-    libmosquitto1 \
-    && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache \
+    libstdc++ \
+    libgcc \
+    mosquitto-libs
 
 COPY --from=builder /src/build/virt_companion/virt_companion /usr/local/bin/virt_companion
 
