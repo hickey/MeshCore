@@ -685,7 +685,7 @@ void MyMesh::begin(FILESYSTEM *fs) {
   _cli.loadPrefs(_fs);
 
   acl.load(_fs, self_id);
-  region_map.load(_fs);
+  region_map.load(_fs, "/regions");
 
   // establish default-scope
   {
@@ -860,7 +860,7 @@ void MyMesh::startRegionsLoad() {
 }
 
 bool MyMesh::saveRegions() {
-  return region_map.save(_fs);
+  return region_map.save(_fs, "/regions");
 }
 
 void MyMesh::onDefaultRegionChanged(const RegionEntry* r) {
