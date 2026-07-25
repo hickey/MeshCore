@@ -47,14 +47,25 @@ int main(int argc, char* argv[]) {
 
     FILESYSTEM fs;
 
-    IdentityStore store(fs, "");
-    if (!store.load("_main", the_mesh.self_id)) {
+    bool loaded_identity = false;
+    if (fs.exists("/identity")) {
+        File file = fs.open("/identity");
+        if (file) {
+            loaded_identity = the_mesh.self_id.readFrom(file);
+            file.close();
+        }
+    }
+    if (!loaded_identity) {
         the_mesh.self_id = radio_new_identity();   // create new random identity
         int count = 0;
         while (count < 10 && (the_mesh.self_id.pub_key[0] == 0x00 || the_mesh.self_id.pub_key[0] == 0xFF)) {  // reserved id hashes
             the_mesh.self_id = radio_new_identity(); count++;
         }
-        store.save("_main", the_mesh.self_id);
+        File file = fs.open("/identity", "w", true);
+        if (file) {
+            the_mesh.self_id.writeTo(file);
+            file.close();
+        }
     }
 
     Serial.print("Room ID: ");

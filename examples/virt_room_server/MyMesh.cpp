@@ -835,14 +835,21 @@ bool MyMesh::setRxBoostedGain(bool enable) {
 void MyMesh::saveIdentity(const mesh::LocalIdentity &new_id) {
 #if defined(NRF52_PLATFORM) || defined(STM32_PLATFORM)
   IdentityStore store(*_fs, "");
+  store.save("_main", new_id);
 #elif defined(ESP32)
   IdentityStore store(*_fs, "/identity");
+  store.save("_main", new_id);
 #elif defined(RP2040_PLATFORM)
   IdentityStore store(*_fs, "/identity");
-#else
-  IdentityStore store(*_fs, "");   // Linux: flat /data layout, no subdirectory
-#endif
   store.save("_main", new_id);
+#else
+  // Linux: flat /data layout, no subdirectory, file named "identity" (no extension)
+  File file = _fs->open("/identity", "w", true);
+  if (file) {
+    new_id.writeTo(file);
+    file.close();
+  }
+#endif
 }
 
 void MyMesh::startRegionsLoad() {
