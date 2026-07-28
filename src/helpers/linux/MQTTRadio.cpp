@@ -43,9 +43,10 @@ MQTTRadio::~MQTTRadio() {
     pthread_mutex_destroy(&_sent_mutex);
 }
 
-void MQTTRadio::setClientId(const uint8_t* pub_key, size_t len) {
+void MQTTRadio::setClientId(const char* prefix, const uint8_t* pub_key, size_t len) {
     snprintf(_client_id, sizeof(_client_id),
-             "meshcore-virt-%02X%02X%02X",
+             "%s-%02X%02X%02X",
+             prefix,
              len > 0 ? pub_key[0] : 0,
              len > 1 ? pub_key[1] : 0,
              len > 2 ? pub_key[2] : 0);

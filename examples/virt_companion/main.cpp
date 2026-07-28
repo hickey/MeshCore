@@ -49,6 +49,20 @@ int main(int argc, char* argv[]) {
     }
 
     store.begin();
+
+    // Load (or generate) identity now so the MQTT client ID can be derived
+    // from the pubkey before the radio connects. MyMesh::begin() below will
+    // load the same identity again — a no-op once it's already on disk.
+    if (!store.loadMainIdentity(the_mesh.self_id)) {
+        the_mesh.self_id = radio_new_identity();
+        int count = 0;
+        while (count < 10 && (the_mesh.self_id.pub_key[0] == 0x00 || the_mesh.self_id.pub_key[0] == 0xFF)) {  // reserved id hashes
+            the_mesh.self_id = radio_new_identity(); count++;
+        }
+        store.saveMainIdentity(the_mesh.self_id);
+    }
+    radio_driver.setClientId("meshcore-companion", the_mesh.self_id.pub_key, PUB_KEY_SIZE);
+
     the_mesh.begin(false);
 
     // Apply NODE_NAME env var — overrides whatever was in stored prefs.

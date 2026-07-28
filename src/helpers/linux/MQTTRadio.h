@@ -52,8 +52,8 @@ public:
     char mqtt_password[64];
 
     // Unique client ID derived from the node's public key prefix.
-    // Call after identity is loaded.
-    void setClientId(const uint8_t* pub_key, size_t len);
+    // Call after identity is loaded, before begin().
+    void setClientId(const char* prefix, const uint8_t* pub_key, size_t len);
 
 private:
     static constexpr int RING_SIZE  = 32;
