@@ -82,6 +82,11 @@ public:
   static int parseTextParts(char* text, const char* parts[], int max_num, char separator=',');
 
   static bool isHexChar(char c);
+
+  /**
+   * \brief  Check if DEBUG environment variable is set/enabled for packet debugging.
+  */
+  static bool isDebugEnabled();
 };
 
 }

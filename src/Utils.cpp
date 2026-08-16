@@ -1,6 +1,8 @@
 #include "Utils.h"
 #include <AES.h>
 #include <SHA256.h>
+#include <cstdlib>
+#include <cstring>
 
 #ifdef ARDUINO
   #include <Arduino.h>
@@ -142,12 +144,21 @@ int Utils::parseTextParts(char* text, const char* parts[], int max_num, char sep
        *sp++ = 0;  // replace the seperator with a null, and skip past it
     }
   }
-  // if we hit the maximum parts, make sure LAST entry does NOT have separator 
+  // if we hit the maximum parts, make sure LAST entry does NOT have separator
   while (*sp && *sp != separator) sp++;
   if (*sp) {
     *sp = 0;  // replace the separator with null
   }
   return num;
+}
+
+bool Utils::isDebugEnabled() {
+  #ifdef ARDUINO
+    return false;  // Not supported on Arduino/embedded targets
+  #else
+    const char* debug_env = getenv("DEBUG");
+    return debug_env != nullptr && strlen(debug_env) > 0;
+  #endif
 }
 
 }

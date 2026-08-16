@@ -179,6 +179,21 @@ DispatcherAction Mesh::onRecvPacket(Packet* pkt) {
                 }
               } else {
                 onPeerDataRecv(pkt, pkt->getPayloadType(), j, secret, data, len);
+
+                if (Utils::isDebugEnabled() && pkt->getPayloadType() == PAYLOAD_TYPE_TXT_MSG) {
+                  Serial.print("[");
+                  Serial.printf("%02X%02X%02X", (uint32_t)src_hash, (uint32_t)(secret[0]), (uint32_t)(secret[1]));
+                  Serial.print("] -> ");
+                  for (int k = 0; k < len; k++) {
+                    uint8_t c = data[k];
+                    if (c >= 32 && c < 127) {
+                      Serial.write(c);
+                    } else if (c != 0) {
+                      Serial.printf("[%02X]", (uint32_t)c);
+                    }
+                  }
+                  Serial.println();
+                }
               }
               found = true;
               break;
