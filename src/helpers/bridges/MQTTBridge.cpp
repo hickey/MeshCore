@@ -22,7 +22,7 @@ MQTTBridge::MQTTBridge(NodePrefs *prefs, mesh::PacketManager *mgr, mesh::RTCCloc
     : BridgeBase(prefs, mgr, rtc), _mesh(nullptr), _ms(nullptr), _radio(nullptr), _radio_driver(nullptr),
       _getPacketsRecv(nullptr), _getPacketsSent(nullptr), _getPacketsRecvErrors(nullptr),
       _getLastRSSI(nullptr), _getLastSNR(nullptr),
-      _mqttClient(_wifiClient), _lastReconnectAttempt(0), _pubKey(pubKey) {
+      _mqttClient(_wifiClient), _lastReconnectAttempt(0), _lastStatusPublish(0), _pubKey(pubKey) {
   _instance = this;
 }
 
@@ -185,6 +185,26 @@ void MQTTBridge::loop() {
     }
   } else {
     _mqttClient.loop();
+
+    // Publish status update at configured interval
+    unsigned long now = millis();
+    if (now - _lastStatusPublish >= (MQTT_STATUS_INTERVAL * 1000)) {
+      _lastStatusPublish = now;
+
+      // Build status topic with pubkey
+      char statusTopic[128];
+      char pubkeyHex[PUB_KEY_SIZE * 2 + 1];
+      for (uint8_t i = 0; i < PUB_KEY_SIZE; i++) {
+        snprintf(&pubkeyHex[i * 2], 3, "%02X", _pubKey[i]);
+      }
+      snprintf(statusTopic, sizeof(statusTopic), "%s/%s", mqtt_status_topic, pubkeyHex);
+
+      if (_mqttClient.publish(statusTopic, buildStatusMessage("online"), true)) {
+        MQTT_DEBUG_PRINTLN("Published periodic status update");
+      } else {
+        MQTT_DEBUG_PRINTLN("Periodic status publish failed");
+      }
+    }
   }
 }
 

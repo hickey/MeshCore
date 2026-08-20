@@ -19,6 +19,7 @@ When a node connects to the MQTT broker, it publishes a comprehensive status mes
 - **Topic**: `MQTT_STATUS_TOPIC/<pubkey_hex>` (e.g., `meshcore/bridge/default/status/A1B2C3D4E5F6...`)
 - **Payload**: JSON object with status and statistics (see below)
 - **Retain Flag**: Set to `true` so subscribers can see the last known status
+- **Update Interval**: Republished periodically at the interval set by `MQTT_STATUS_INTERVAL` (default 60 seconds)
 
 #### Status Message Fields
 
@@ -171,6 +172,7 @@ Each change tears down and reinitializes the MQTT client connection.
 | `MQTT_PASSWORD` | *(none)* | No | MQTT broker password for authentication |
 | `MQTT_PACKET_TOPIC` | `"meshcore/bridge/default/packets"` | No | MQTT topic for mesh packet exchange. All nodes on the same topic form one mesh domain |
 | `MQTT_STATUS_TOPIC` | `"meshcore/bridge/default/status"` | No | MQTT topic base for status messages. Each node appends `/<pubkey_hex>` |
+| `MQTT_STATUS_INTERVAL` | `60` | No | Status publish interval in seconds. How often status updates are published to the broker |
 | `MQTT_DEBUG` | `0` | No | Set to `1` to enable debug output to `Serial` |
 | `MQTT_MAX_PACKET_SIZE` | `512` | No | Maximum MQTT packet size in bytes. Must accommodate MQTT headers + topic + hex payload (max 370 chars) |
 | `WIFI_SSID` | *(none)* | Recommended | WiFi network SSID. If omitted, WiFi must be started manually before `bridge.begin()` |
