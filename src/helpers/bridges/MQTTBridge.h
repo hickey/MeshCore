@@ -29,6 +29,8 @@
 #include <PubSubClient.h>
 #include <Mesh.h>
 
+class SimpleMeshTables;
+
 #if MQTT_DEBUG && ARDUINO
   #define MQTT_DEBUG_PRINTLN(F, ...) Serial.printf("%s MQTT: " F "\n", getLogDateTime(), ##__VA_ARGS__)
 #else
@@ -91,6 +93,8 @@ public:
 
   void setMillisecondClock(mesh::MillisecondClock *ms) { _ms = ms; }
   void setRadio(mesh::Radio *radio) { _radio = radio; }
+  void setTables(SimpleMeshTables *tables) { _tables = tables; }
+  void setMainBoard(mesh::MainBoard *board) { _board = board; }
 
   const char* buildStatusMessage(const char *status);
 
@@ -100,13 +104,15 @@ private:
   mesh::Mesh *_mesh;
   mesh::MillisecondClock *_ms;
   mesh::Radio *_radio;
+  SimpleMeshTables *_tables;
+  mesh::MainBoard *_board;
   void *_radio_driver;
 
   // Type-erased function pointers for radio driver stats
   uint32_t (*_getPacketsRecv)(void*);
   uint32_t (*_getPacketsSent)(void*);
   uint32_t (*_getPacketsRecvErrors)(void*);
-  int16_t (*_getLastRSSI)(void*);
+  float (*_getLastRSSI)(void*);
   float (*_getLastSNR)(void*);
 
   WiFiClient _wifiClient;
@@ -123,7 +129,7 @@ private:
   char _hexBuf[HEX_BUF_SIZE];
 
   // Buffer for status messages
-  static constexpr size_t STATUS_BUF_SIZE = 512;
+  static constexpr size_t STATUS_BUF_SIZE = 768;
   char _statusBuf[STATUS_BUF_SIZE];
 
   static void mqttCallback(char *topic, uint8_t *payload, unsigned int length);

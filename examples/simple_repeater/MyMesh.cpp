@@ -887,6 +887,11 @@ MyMesh::MyMesh(mesh::MainBoard &board, mesh::Radio &radio, mesh::MillisecondCloc
 
 #ifdef WITH_MQTT_BRIDGE
   bridge.setMesh(this);
+  bridge.setMainBoard(&board);
+  bridge.setMillisecondClock(&ms);
+  bridge.setRadio(&radio);
+  bridge.setTables(static_cast<SimpleMeshTables*>(&tables));
+  bridge.setRadioDriver(&radio_driver);
 #endif
 
 #if MAX_NEIGHBOURS

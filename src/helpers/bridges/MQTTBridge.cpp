@@ -20,7 +20,7 @@
 MQTTBridge *MQTTBridge::_instance = nullptr;
 
 MQTTBridge::MQTTBridge(NodePrefs *prefs, mesh::PacketManager *mgr, mesh::RTCClock *rtc, const uint8_t *pubKey)
-    : BridgeBase(prefs, mgr, rtc), _mesh(nullptr), _ms(nullptr), _radio(nullptr), _radio_driver(nullptr),
+    : BridgeBase(prefs, mgr, rtc), _mesh(nullptr), _ms(nullptr), _radio(nullptr), _tables(nullptr), _board(nullptr), _radio_driver(nullptr),
       _getPacketsRecv(nullptr), _getPacketsSent(nullptr), _getPacketsRecvErrors(nullptr),
       _getLastRSSI(nullptr), _getLastSNR(nullptr),
       _mqttClient(_wifiClient), _lastReconnectAttempt(0), _lastStatusPublish(0), _pubKey(pubKey) {
@@ -59,7 +59,7 @@ void MQTTBridge::begin() {
 void MQTTBridge::initialize() {
   _mqttClient.setServer(mqtt_host, mqtt_port);
   _mqttClient.setCallback(mqttCallback);
-  _mqttClient.setBufferSize(2*MAX_TRANS_UNIT);
+  _mqttClient.setBufferSize(1024);  // Increased for larger status messages
 
   _initialized = true;
   MQTT_DEBUG_PRINTLN("Initialized, broker=%s:%d packet_topic=%s status_topic=%s",
@@ -75,7 +75,35 @@ void MQTTBridge::end() {
 }
 
 const char* MQTTBridge::buildStatusMessage(const char *status) {
-  int offset = snprintf(_statusBuf, STATUS_BUF_SIZE, "{\"status\":\"%s\"", status);
+  int offset = snprintf(_statusBuf, STATUS_BUF_SIZE, "{\"status\": \"%s\"", status);
+
+  // Add node name
+  if (_prefs && _prefs->node_name[0] != '\0') {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"node_name\": \"%s\"", _prefs->node_name);
+  }
+
+  // For offline status, skip all other fields
+  if (strcmp(status, "offline") == 0) {
+    snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "}");
+    return _statusBuf;
+  }
+
+  // Add model (from build define)
+#ifdef ADVERT_NAME
+  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"model\": \"%s\"", ADVERT_NAME);
+#endif
+
+  // Add firmware version (from build define if available)
+#ifdef FIRMWARE_VERSION
+  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"firmware_version\": \"%s\"", FIRMWARE_VERSION);
+#endif
+
+  // Add radio settings (freq, bw, sf, cr)
+  if (_prefs) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset,
+                      ", \"radio_settings\": \"%.3f, %.1f, %u, %u\"",
+                      _prefs->freq, _prefs->bw, _prefs->sf, _prefs->cr);
+  }
 
   // Add bridge source mode
   const char *bridge_source_str;
@@ -89,53 +117,113 @@ const char* MQTTBridge::buildStatusMessage(const char *status) {
   } else {
     bridge_source_str = "none";
   }
-  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"bridge_source\":\"%s\"", bridge_source_str);
+  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"bridge_source\": \"%s\"", bridge_source_str);
 
-  // Add uptime if millisecond clock available
+  // Add uptime if millisecond clock available (human readable format)
   if (_ms) {
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"uptime_secs\":%u", (uint32_t)(_ms->getMillis() / 1000));
+    uint32_t uptime_secs = (uint32_t)(_ms->getMillis() / 1000);
+    char uptime_str[32];
+    uint32_t mins = uptime_secs / 60;
+    uint32_t hours = uptime_secs / 3600;
+    uint32_t days = uptime_secs / 84600;
+
+    snprintf(uptime_str, sizeof(uptime_str), "%ud%dh%um", days, hours, mins);
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"uptime\": \"%s\"", uptime_str);
   }
+
+  // Add RTC clock timestamp if available
+  if (_rtc) {
+    uint32_t timestamp = _rtc->getCurrentTime();
+    time_t t = (time_t)timestamp;
+    struct tm timeinfo;
+    gmtime_r(&t, &timeinfo);
+    char timeBuf[32];
+    strftime(timeBuf, sizeof(timeBuf), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"clock\": \"%s\"", timeBuf);
+  }
+
+  // Add stats object with mesh and radio statistics
+  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"stats\": {");
+
+  bool first_stat = true;
 
   // Add mesh statistics if available
   if (_mesh) {
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_air_secs\":%u", (uint32_t)(_mesh->getTotalAirTime() / 1000));
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_air_secs\":%u", (uint32_t)(_mesh->getReceiveAirTime() / 1000));
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_packets\":%u", _mesh->getNumSentFlood() + _mesh->getNumSentDirect());
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_flood\":%u", _mesh->getNumSentFlood());
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_direct\":%u", _mesh->getNumSentDirect());
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_packets\":%u", _mesh->getNumRecvFlood() + _mesh->getNumRecvDirect());
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_flood\":%u", _mesh->getNumRecvFlood());
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_direct\":%u", _mesh->getNumRecvDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "\"tx_air_secs\": %u", (uint32_t)(_mesh->getTotalAirTime() / 1000));
+    first_stat = false;
+
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"rx_air_secs\": %u", (uint32_t)(_mesh->getReceiveAirTime() / 1000));
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"tx_packets\": %u", _mesh->getNumSentFlood() + _mesh->getNumSentDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"tx_flood\": %u", _mesh->getNumSentFlood());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"tx_direct\": %u", _mesh->getNumSentDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"rx_packets\": %u", _mesh->getNumRecvFlood() + _mesh->getNumRecvDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"rx_flood\": %u", _mesh->getNumRecvFlood());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"rx_direct\": %u", _mesh->getNumRecvDirect());
 
     // Add duplicate packet counts if SimpleMeshTables available
-    SimpleMeshTables *tables = (SimpleMeshTables*)_mesh->getTables();
-    if (tables) {
-      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"dup_flood\":%u", tables->getNumFloodDups());
-      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"dup_direct\":%u", tables->getNumDirectDups());
+    if (_tables) {
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"dup_flood\": %u", _tables->getNumFloodDups());
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"dup_direct\": %u", _tables->getNumDirectDups());
     }
   }
 
   // Add radio statistics if available
   if (_radio) {
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"noise_floor\":%d", (int16_t)_radio->getNoiseFloor());
+    if (!first_stat) {
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", ");
+    }
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "\"noise_floor\": %d", (int16_t)_radio->getNoiseFloor());
+    first_stat = false;
   }
 
   // Add radio driver statistics if available
   if (_radio_driver && _getLastRSSI && _getLastSNR && _getPacketsRecvErrors) {
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"last_rssi\":%d", _getLastRSSI(_radio_driver));
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"last_snr\":%.2f", _getLastSNR(_radio_driver));
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_errors\":%u", _getPacketsRecvErrors(_radio_driver));
+    if (!first_stat) {
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", ");
+    }
+    float rssi_raw = _getLastRSSI(_radio_driver);
+    float rssi_scaled = rssi_raw / 100000000.0f;
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "\"last_rssi\": %.2f", rssi_scaled);
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"last_snr\": %.2f", _getLastSNR(_radio_driver));
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"rx_errors\": %u", _getPacketsRecvErrors(_radio_driver));
+    first_stat = false;
   }
 
   // Add packet manager queue length
   if (_mgr) {
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_queue_len\":%u", _mgr->getOutboundTotal());
+    if (!first_stat) {
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", ");
+    }
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "\"tx_queue_len\": %u", _mgr->getOutboundTotal());
+    first_stat = false;
   }
 
-  // Add RTC clock timestamp if available
-  if (_rtc) {
-    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"clock\":%u", (uint32_t)_rtc->now().unixtime());
+  // Add battery voltage and percentage
+  if (_board) {
+    uint16_t batt_mv = _board->getBattMilliVolts();
+    if (batt_mv > 0) {
+      if (!first_stat) {
+        offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", ");
+      }
+      float batt_volts = batt_mv / 1000.0f;
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "\"battery_voltage\": %.3f", batt_volts);
+
+      // Calculate battery percentage (LiPo: 4.2V = 100%, 3.0V = 0%)
+      uint8_t batt_pct = 0;
+      if (batt_mv >= 4200) {
+        batt_pct = 100;
+      } else if (batt_mv <= 3000) {
+        batt_pct = 0;
+      } else {
+        batt_pct = (uint8_t)(((batt_mv - 3000) * 100) / 1200);
+      }
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ", \"battery_percent\": %u", batt_pct);
+      first_stat = false;
+    }
   }
+
+  // Close stats object
+  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "}");
 
   snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "}");
   return _statusBuf;
@@ -162,7 +250,7 @@ bool MQTTBridge::reconnect() {
   snprintf(statusTopic, sizeof(statusTopic), "%s/%s", mqtt_status_topic, pubkeyHex);
 
   bool ok;
-  const char *offlineMsg = "{\"status\":\"offline\"}";
+  const char *offlineMsg = buildStatusMessage("offline");
 
 #if defined(MQTT_USERNAME) && defined(MQTT_PASSWORD)
   ok = _mqttClient.connect(clientId, _mqtt_username, _mqtt_password, statusTopic, 0, true, offlineMsg);
