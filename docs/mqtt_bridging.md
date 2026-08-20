@@ -27,7 +27,8 @@ The status message includes the following fields (when available):
 
 | Field | Description |
 |-------|-------------|
-| `status` | Connection status: "online" or "offline" |
+| `status` | Connection status: "online" when bridge_source is non-zero, "not-bridging" when bridge_source is 0, or "offline" (LWT) |
+| `bridge_source` | Bridge direction setting: "rx", "tx", "both", or "none" |
 | `uptime_secs` | Node uptime in seconds |
 | `tx_air_secs` | Total transmit airtime in seconds |
 | `rx_air_secs` | Total receive airtime in seconds |
@@ -50,6 +51,7 @@ The status message includes the following fields (when available):
 ```json
 {
   "status": "online",
+  "bridge_source": "both",
   "uptime_secs": 3600,
   "tx_air_secs": 45,
   "rx_air_secs": 120,
