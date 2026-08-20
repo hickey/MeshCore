@@ -15,10 +15,59 @@ The MQTT bridge enables MeshCore nodes to communicate over WiFi and MQTT in addi
 
 ### Status Publishing
 
-When a node connects to the MQTT broker, it publishes a status message:
+When a node connects to the MQTT broker, it publishes a comprehensive status message:
 - **Topic**: `MQTT_STATUS_TOPIC/<pubkey_hex>` (e.g., `meshcore/bridge/default/status/A1B2C3D4E5F6...`)
-- **Payload**: `{"status":"online"}`
+- **Payload**: JSON object with status and statistics (see below)
 - **Retain Flag**: Set to `true` so subscribers can see the last known status
+
+#### Status Message Fields
+
+The status message includes the following fields (when available):
+
+| Field | Description |
+|-------|-------------|
+| `status` | Connection status: "online" or "offline" |
+| `uptime_secs` | Node uptime in seconds |
+| `tx_air_secs` | Total transmit airtime in seconds |
+| `rx_air_secs` | Total receive airtime in seconds |
+| `tx_packets` | Total packets transmitted (flood + direct) |
+| `tx_flood` | Flood-routed packets transmitted |
+| `tx_direct` | Direct-routed packets transmitted |
+| `rx_packets` | Total packets received (flood + direct) |
+| `rx_flood` | Flood-routed packets received |
+| `rx_direct` | Direct-routed packets received |
+| `dup_flood` | Duplicate flood packets detected |
+| `dup_direct` | Duplicate direct packets detected |
+| `noise_floor` | Current RF noise floor (dBm) |
+| `last_rssi` | Last received signal strength (dBm) |
+| `last_snr` | Last signal-to-noise ratio |
+| `rx_errors` | Received packet errors |
+| `tx_queue_len` | Current transmit queue length |
+| `clock` | Unix timestamp from RTC |
+
+**Example online status message:**
+```json
+{
+  "status": "online",
+  "uptime_secs": 3600,
+  "tx_air_secs": 45,
+  "rx_air_secs": 120,
+  "tx_packets": 150,
+  "tx_flood": 100,
+  "tx_direct": 50,
+  "rx_packets": 320,
+  "rx_flood": 280,
+  "rx_direct": 40,
+  "dup_flood": 15,
+  "dup_direct": 3,
+  "noise_floor": -110,
+  "last_rssi": -85,
+  "last_snr": 8.5,
+  "rx_errors": 2,
+  "tx_queue_len": 0,
+  "clock": 1724198400
+}
+```
 
 ### Last Will and Testament (LWT)
 

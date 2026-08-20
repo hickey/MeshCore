@@ -19,7 +19,10 @@
 MQTTBridge *MQTTBridge::_instance = nullptr;
 
 MQTTBridge::MQTTBridge(NodePrefs *prefs, mesh::PacketManager *mgr, mesh::RTCClock *rtc, const uint8_t *pubKey)
-    : BridgeBase(prefs, mgr, rtc), _mesh(nullptr), _mqttClient(_wifiClient), _lastReconnectAttempt(0), _pubKey(pubKey) {
+    : BridgeBase(prefs, mgr, rtc), _mesh(nullptr), _ms(nullptr), _radio(nullptr), _radio_driver(nullptr),
+      _getPacketsRecv(nullptr), _getPacketsSent(nullptr), _getPacketsRecvErrors(nullptr),
+      _getLastRSSI(nullptr), _getLastSNR(nullptr),
+      _mqttClient(_wifiClient), _lastReconnectAttempt(0), _pubKey(pubKey) {
   _instance = this;
 }
 
@@ -70,6 +73,59 @@ void MQTTBridge::end() {
   MQTT_DEBUG_PRINTLN("Stopped");
 }
 
+const char* MQTTBridge::buildStatusMessage(const char *status) {
+  int offset = snprintf(_statusBuf, STATUS_BUF_SIZE, "{\"status\":\"%s\"", status);
+
+  // Add uptime if millisecond clock available
+  if (_ms) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"uptime_secs\":%u", (uint32_t)(_ms->getMillis() / 1000));
+  }
+
+  // Add mesh statistics if available
+  if (_mesh) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_air_secs\":%u", (uint32_t)(_mesh->getTotalAirTime() / 1000));
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_air_secs\":%u", (uint32_t)(_mesh->getReceiveAirTime() / 1000));
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_packets\":%u", _mesh->getNumSentFlood() + _mesh->getNumSentDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_flood\":%u", _mesh->getNumSentFlood());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_direct\":%u", _mesh->getNumSentDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_packets\":%u", _mesh->getNumRecvFlood() + _mesh->getNumRecvDirect());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_flood\":%u", _mesh->getNumRecvFlood());
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_direct\":%u", _mesh->getNumRecvDirect());
+
+    // Add duplicate packet counts if SimpleMeshTables available
+    SimpleMeshTables *tables = (SimpleMeshTables*)_mesh->getTables();
+    if (tables) {
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"dup_flood\":%u", tables->getNumFloodDups());
+      offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"dup_direct\":%u", tables->getNumDirectDups());
+    }
+  }
+
+  // Add radio statistics if available
+  if (_radio) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"noise_floor\":%d", (int16_t)_radio->getNoiseFloor());
+  }
+
+  // Add radio driver statistics if available
+  if (_radio_driver && _getLastRSSI && _getLastSNR && _getPacketsRecvErrors) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"last_rssi\":%d", _getLastRSSI(_radio_driver));
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"last_snr\":%.2f", _getLastSNR(_radio_driver));
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"rx_errors\":%u", _getPacketsRecvErrors(_radio_driver));
+  }
+
+  // Add packet manager queue length
+  if (_mgr) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"tx_queue_len\":%u", _mgr->getOutboundTotal());
+  }
+
+  // Add RTC clock timestamp if available
+  if (_rtc) {
+    offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"clock\":%u", (uint32_t)_rtc->now().unixtime());
+  }
+
+  snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, "}");
+  return _statusBuf;
+}
+
 bool MQTTBridge::reconnect() {
   if (WiFi.status() != WL_CONNECTED) {
     MQTT_DEBUG_PRINTLN("WiFi not connected, skipping MQTT reconnect");
@@ -105,9 +161,8 @@ bool MQTTBridge::reconnect() {
     _mqttClient.subscribe(mqtt_packet_topic);
     MQTT_DEBUG_PRINTLN("Connected, subscribed to %s", mqtt_packet_topic);
 
-    // Publish status as online
-    const char *onlineMsg = "{\"status\":\"online\"}";
-    if (_mqttClient.publish(statusTopic, onlineMsg, true)) {
+    // Publish status as online with statistics
+    if (_mqttClient.publish(statusTopic, buildStatusMessage("online"), true)) {
       MQTT_DEBUG_PRINTLN("Published status to %s", statusTopic);
     } else {
       MQTT_DEBUG_PRINTLN("Status publish failed");
