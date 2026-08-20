@@ -6,8 +6,12 @@
   #define MQTT_PORT 1883
 #endif
 
-#ifndef MQTT_TOPIC
-  #define MQTT_TOPIC "meshcore/packets"
+#ifndef MQTT_PACKET_TOPIC
+  #define MQTT_PACKET_TOPIC "meshcore/bridge/default/packets"
+#endif
+
+#ifndef MQTT_STATUS_TOPIC
+  #define MQTT_STATUS_TOPIC "meshcore/bridge/default/status"
 #endif
 
 // MQTT_MAX_PACKET_SIZE must fit: MQTT headers + topic + hex payload
@@ -34,13 +38,14 @@
  * to/from the MQTT broker. Packets are encoded as uppercase ASCII hex strings.
  *
  * Configuration build defines:
- *   WITH_MQTT_BRIDGE   — enable this bridge
- *   MQTT_HOST          — broker hostname or IP (required)
- *   MQTT_PORT          — broker port (default 1883)
- *   MQTT_USERNAME      — broker username (optional, omit to disable auth)
- *   MQTT_PASSWORD      — broker password (optional)
- *   MQTT_TOPIC         — topic to publish/subscribe (default "meshcore/packets")
- *   MQTT_DEBUG         — set to 1 to enable debug output on Serial
+ *   WITH_MQTT_BRIDGE      — enable this bridge
+ *   MQTT_HOST             — broker hostname or IP (required)
+ *   MQTT_PORT             — broker port (default 1883)
+ *   MQTT_USERNAME         — broker username (optional, omit to disable auth)
+ *   MQTT_PASSWORD         — broker password (optional)
+ *   MQTT_PACKET_TOPIC     — topic to publish/subscribe (default "meshcore/bridge/default/packets")
+ *   MQTT_STATUS_TOPIC     — topic to publish status (default "meshcore/bridge/default/status")
+ *   MQTT_DEBUG            — set to 1 to enable debug output on Serial
  *
  * WiFi must be configured separately via WIFI_SSID / WIFI_PWD build defines,
  * or by calling WiFi.begin() before this bridge's begin() is invoked. The
@@ -57,7 +62,8 @@ public:
 
   char mqtt_host[64];
   uint mqtt_port;
-  char mqtt_topic[64];
+  char mqtt_packet_topic[64];
+  char mqtt_status_topic[64];
 
   void begin() override;
   void end() override;
