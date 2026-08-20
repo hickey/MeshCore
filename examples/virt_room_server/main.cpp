@@ -13,9 +13,10 @@
 static volatile sig_atomic_t _running = 1;
 static void handle_signal(int) { _running = 0; }
 
+ArduinoMillis    ms_clock;
 StdRNG           fast_rng;
 SimpleMeshTables tables;
-MyMesh           the_mesh(board, radio_driver, *new ArduinoMillis(), fast_rng, rtc_clock, tables);
+MyMesh           the_mesh(board, radio_driver, ms_clock, fast_rng, rtc_clock, tables);
 
 static char command[MAX_POST_TEXT_LEN+1];
 
@@ -72,6 +73,10 @@ int main(int argc, char* argv[]) {
     mesh::Utils::printHex(Serial, the_mesh.self_id.pub_key, PUB_KEY_SIZE); Serial.println();
 
     radio_driver.setClientId("meshcore-room-server", the_mesh.self_id.pub_key, PUB_KEY_SIZE);
+    radio_driver.setMesh(&the_mesh);
+    radio_driver.setMillisecondClock(&ms_clock);
+    radio_driver.setRTCClock(&rtc_clock);
+    radio_driver.setTables(&tables);
 
     // NODE_NAME env var only applies on first boot (no saved prefs yet).
     // Afterwards the persisted name always wins, so check for existing prefs
@@ -87,6 +92,13 @@ int main(int argc, char* argv[]) {
                 sizeof(the_mesh.getNodePrefs()->node_name) - 1);
         the_mesh.getNodePrefs()->node_name[sizeof(the_mesh.getNodePrefs()->node_name) - 1] = '\0';
         the_mesh.savePrefs();
+    }
+
+    // Copy node name to radio driver for status messages
+    if (the_mesh.getNodePrefs()->node_name[0]) {
+        strncpy(radio_driver.node_name, the_mesh.getNodePrefs()->node_name,
+                sizeof(radio_driver.node_name) - 1);
+        radio_driver.node_name[sizeof(radio_driver.node_name) - 1] = '\0';
     }
 
     command[0] = 0;

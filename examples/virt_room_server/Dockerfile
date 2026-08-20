@@ -35,6 +35,7 @@ VOLUME ["/data"]
 ENV NODE_NAME=VirtualRoomServer \
     MQTT_HOST=localhost \
     MQTT_PORT=1883 \
-    MQTT_TOPIC=meshcore/packets
+    MQTT_PACKET_TOPIC=meshcore/bridge/default/packets \
+    MQTT_STATUS_TOPIC=meshcore/bridge/default/status
 
 ENTRYPOINT ["/usr/local/bin/virt_room_server"]

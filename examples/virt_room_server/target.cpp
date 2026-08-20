@@ -13,17 +13,21 @@ SensorManager sensors;
 char**        _argv = nullptr;
 
 bool radio_init() {
-    const char* host     = getenv("MQTT_HOST");
-    const char* port_str = getenv("MQTT_PORT");
-    const char* topic    = getenv("MQTT_TOPIC");
-    const char* user     = getenv("MQTT_USERNAME");
-    const char* pass     = getenv("MQTT_PASSWORD");
+    const char* host            = getenv("MQTT_HOST");
+    const char* port_str        = getenv("MQTT_PORT");
+    const char* packet_topic    = getenv("MQTT_PACKET_TOPIC");
+    const char* status_topic    = getenv("MQTT_STATUS_TOPIC");
+    const char* status_interval = getenv("MQTT_STATUS_INTERVAL");
+    const char* user            = getenv("MQTT_USERNAME");
+    const char* pass            = getenv("MQTT_PASSWORD");
 
-    if (host)     strncpy(radio_driver.mqtt_host,     host,     sizeof(radio_driver.mqtt_host)-1);
-    if (port_str) radio_driver.mqtt_port = atoi(port_str);
-    if (topic)    strncpy(radio_driver.mqtt_topic,    topic,    sizeof(radio_driver.mqtt_topic)-1);
-    if (user)     strncpy(radio_driver.mqtt_username, user,     sizeof(radio_driver.mqtt_username)-1);
-    if (pass)     strncpy(radio_driver.mqtt_password, pass,     sizeof(radio_driver.mqtt_password)-1);
+    if (host)            strncpy(radio_driver.mqtt_host,         host,         sizeof(radio_driver.mqtt_host)-1);
+    if (port_str)        radio_driver.mqtt_port = atoi(port_str);
+    if (packet_topic)    strncpy(radio_driver.mqtt_packet_topic, packet_topic, sizeof(radio_driver.mqtt_packet_topic)-1);
+    if (status_topic)    strncpy(radio_driver.mqtt_status_topic, status_topic, sizeof(radio_driver.mqtt_status_topic)-1);
+    if (status_interval) radio_driver.mqtt_status_interval = atoi(status_interval);
+    if (user)            strncpy(radio_driver.mqtt_username,     user,         sizeof(radio_driver.mqtt_username)-1);
+    if (pass)            strncpy(radio_driver.mqtt_password,     pass,         sizeof(radio_driver.mqtt_password)-1);
 
     const char* lat_str = getenv("LOCATION_LAT");
     const char* lon_str = getenv("LOCATION_LONG");

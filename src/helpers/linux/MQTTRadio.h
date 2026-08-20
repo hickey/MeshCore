@@ -8,8 +8,9 @@
 
 // mesh::Radio implementation that sends and receives MeshCore packets over
 // MQTT.  Packets are encoded as uppercase ASCII hex strings on a single shared
-// topic (default "meshcore/packets"), matching the MQTTBridge wire format on
-// the feat/mqtt-bridge branch.
+// topic (default "meshcore/bridge/default/packets"), matching the MQTTBridge
+// wire format. Status updates are published periodically to a status topic
+// (default "meshcore/bridge/default/status").
 //
 // Mosquitto's network loop runs in a background thread via
 // mosquitto_loop_start().  Incoming messages are decoded and placed in a
@@ -48,13 +49,31 @@ public:
     // Configuration — set before begin(), or pick up from env vars.
     char mqtt_host[128];
     int  mqtt_port;
-    char mqtt_topic[128];
+    int  mqtt_status_interval;  // status publish interval in seconds (default 60)
+    char mqtt_packet_topic[128];
+    char mqtt_status_topic[128];
     char mqtt_username[64];
     char mqtt_password[64];
+    char node_name[32];
 
     // Unique client ID derived from the node's public key prefix.
     // Call after identity is loaded, before begin().
     void setClientId(const char* prefix, const uint8_t* pub_key, size_t len);
+
+    // Build and return a JSON status message
+    const char* buildStatusMessage(const char* status);
+
+    // Set the mesh instance for access to statistics
+    void setMesh(mesh::Mesh* mesh) { _mesh = mesh; }
+
+    // Set the millisecond clock for uptime tracking
+    void setMillisecondClock(mesh::MillisecondClock* ms) { _ms = ms; }
+
+    // Set the RTC clock for timestamp tracking
+    void setRTCClock(mesh::RTCClock* rtc) { _rtc = rtc; }
+
+    // Set the tables instance for duplicate tracking statistics
+    void setTables(SimpleMeshTables* tables) { _tables = tables; }
 
 private:
     static constexpr int RING_SIZE  = 32;
@@ -78,8 +97,18 @@ private:
     char _client_id[48];
     bool _connected;
     unsigned long _last_reconnect_ms;
+    unsigned long _last_status_publish_ms;
     uint32_t _n_recv;
     uint32_t _n_sent;
+
+    mesh::Mesh*             _mesh;
+    mesh::MillisecondClock* _ms;
+    mesh::RTCClock*         _rtc;
+    SimpleMeshTables*       _tables;
+
+    static constexpr size_t STATUS_BUF_SIZE = 512;
+    char _status_buf[STATUS_BUF_SIZE];
+    const uint8_t* _pub_key;
 
     static void onConnect(struct mosquitto*, void*, int rc);
     static void onMessage(struct mosquitto*, void*, const struct mosquitto_message*);
