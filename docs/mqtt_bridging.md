@@ -20,6 +20,16 @@ When a node connects to the MQTT broker, it publishes a status message:
 - **Payload**: `{"status":"online"}`
 - **Retain Flag**: Set to `true` so subscribers can see the last known status
 
+### Last Will and Testament (LWT)
+
+The bridge configures an MQTT Last Will and Testament when connecting:
+- **Topic**: Same as online status (`MQTT_STATUS_TOPIC/<pubkey_hex>`)
+- **Payload**: `{"status":"offline"}`
+- **Retain Flag**: Set to `true`
+- **Behavior**: Automatically published by the broker when the client disconnects unexpectedly (network failure, crash, etc.)
+
+This allows monitoring systems to track when nodes go offline, even if the node cannot send a graceful disconnect message.
+
 ### Client Identification
 
 Each bridge instance uses a unique MQTT client ID derived from its public key:

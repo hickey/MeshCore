@@ -81,30 +81,33 @@ bool MQTTBridge::reconnect() {
   char clientId[28]; // "meshcore-mqtt-bridge-" (21) + 6 hex chars + null
   snprintf(clientId, sizeof(clientId), "meshcore-mqtt-bridge-%02X%02X%02X",
            _pubKey[0], _pubKey[1], _pubKey[2]);
+
+  // Build status topic with pubkey
+  char statusTopic[128];
+  char pubkeyHex[PUB_KEY_SIZE * 2 + 1];
+  for (uint8_t i = 0; i < PUB_KEY_SIZE; i++) {
+    snprintf(&pubkeyHex[i * 2], 3, "%02X", _pubKey[i]);
+  }
+  snprintf(statusTopic, sizeof(statusTopic), "%s/%s", mqtt_status_topic, pubkeyHex);
+
   bool ok;
+  const char *offlineMsg = "{\"status\":\"offline\"}";
 
 #if defined(MQTT_USERNAME) && defined(MQTT_PASSWORD)
-  ok = _mqttClient.connect(clientId, _mqtt_username, _mqtt_password);
+  ok = _mqttClient.connect(clientId, _mqtt_username, _mqtt_password, statusTopic, 0, true, offlineMsg);
 #elif defined(MQTT_USERNAME)
-  ok = _mqttClient.connect(clientId, _mqtt_username, nullptr);
+  ok = _mqttClient.connect(clientId, _mqtt_username, nullptr, statusTopic, 0, true, offlineMsg);
 #else
-  ok = _mqttClient.connect(clientId);
+  ok = _mqttClient.connect(clientId, nullptr, nullptr, statusTopic, 0, true, offlineMsg);
 #endif
 
   if (ok) {
     _mqttClient.subscribe(mqtt_packet_topic);
     MQTT_DEBUG_PRINTLN("Connected, subscribed to %s", mqtt_packet_topic);
 
-    // Publish status as online - topic includes pubkey as path element
-    char statusTopic[128];
-    char pubkeyHex[PUB_KEY_SIZE * 2 + 1];
-    for (uint8_t i = 0; i < PUB_KEY_SIZE; i++) {
-      snprintf(&pubkeyHex[i * 2], 3, "%02X", _pubKey[i]);
-    }
-    snprintf(statusTopic, sizeof(statusTopic), "%s/%s", mqtt_status_topic, pubkeyHex);
-
-    const char *statusMsg = "{\"status\":\"online\"}";
-    if (_mqttClient.publish(statusTopic, statusMsg, true)) {
+    // Publish status as online
+    const char *onlineMsg = "{\"status\":\"online\"}";
+    if (_mqttClient.publish(statusTopic, onlineMsg, true)) {
       MQTT_DEBUG_PRINTLN("Published status to %s", statusTopic);
     } else {
       MQTT_DEBUG_PRINTLN("Status publish failed");
