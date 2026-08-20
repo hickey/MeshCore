@@ -46,7 +46,8 @@ void MQTTBridge::begin() {
   mqtt_port = MQTT_PORT;
   StrHelper::strzcpy(_mqtt_username, MQTT_USERNAME, sizeof(_mqtt_username));
   StrHelper::strzcpy(_mqtt_password, MQTT_PASSWORD, sizeof(_mqtt_password));
-  StrHelper::strzcpy(mqtt_topic, MQTT_TOPIC, sizeof(mqtt_topic));
+  StrHelper::strzcpy(mqtt_packet_topic, MQTT_PACKET_TOPIC, sizeof(mqtt_packet_topic));
+  StrHelper::strzcpy(mqtt_status_topic, MQTT_STATUS_TOPIC, sizeof(mqtt_status_topic));
 
   initialize();
 }
@@ -57,7 +58,8 @@ void MQTTBridge::initialize() {
   _mqttClient.setBufferSize(2*MAX_TRANS_UNIT);
 
   _initialized = true;
-  MQTT_DEBUG_PRINTLN("Initialized, broker=%s:%d topic=%s", mqtt_host, mqtt_port, mqtt_topic);
+  MQTT_DEBUG_PRINTLN("Initialized, broker=%s:%d packet_topic=%s status_topic=%s",
+                     mqtt_host, mqtt_port, mqtt_packet_topic, mqtt_status_topic);
 }
 
 void MQTTBridge::end() {
@@ -90,8 +92,23 @@ bool MQTTBridge::reconnect() {
 #endif
 
   if (ok) {
-    _mqttClient.subscribe(mqtt_topic);
-    MQTT_DEBUG_PRINTLN("Connected, subscribed to %s", mqtt_topic);
+    _mqttClient.subscribe(mqtt_packet_topic);
+    MQTT_DEBUG_PRINTLN("Connected, subscribed to %s", mqtt_packet_topic);
+
+    // Publish status as online - topic includes pubkey as path element
+    char statusTopic[128];
+    char pubkeyHex[PUB_KEY_SIZE * 2 + 1];
+    for (uint8_t i = 0; i < PUB_KEY_SIZE; i++) {
+      snprintf(&pubkeyHex[i * 2], 3, "%02X", _pubKey[i]);
+    }
+    snprintf(statusTopic, sizeof(statusTopic), "%s/%s", mqtt_status_topic, pubkeyHex);
+
+    const char *statusMsg = "{\"status\":\"online\"}";
+    if (_mqttClient.publish(statusTopic, statusMsg, true)) {
+      MQTT_DEBUG_PRINTLN("Published status to %s", statusTopic);
+    } else {
+      MQTT_DEBUG_PRINTLN("Status publish failed");
+    }
   } else {
     MQTT_DEBUG_PRINTLN("Connect failed, rc=%d", _mqttClient.state());
   }
@@ -135,7 +152,7 @@ void MQTTBridge::sendPacket(mesh::Packet *packet) {
     }
     _hexBuf[len * 2] = '\0';
 
-    if (_mqttClient.publish(mqtt_topic, _hexBuf)) {
+    if (_mqttClient.publish(mqtt_packet_topic, _hexBuf)) {
       MQTT_DEBUG_PRINTLN("PUB raw=%s", _hexBuf);
       _seen_packets.markSeen(packet);
     } else {
