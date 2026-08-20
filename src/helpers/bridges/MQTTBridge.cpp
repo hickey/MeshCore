@@ -1,5 +1,6 @@
 #include "MQTTBridge.h"
 #include "Identity.h"
+#include <helpers/CommonCLI.h>
 #include <helpers/esp32/SerialWifiInterface.h>
 #include <helpers/TxtDataHelpers.h>
 #include <string>
@@ -75,6 +76,20 @@ void MQTTBridge::end() {
 
 const char* MQTTBridge::buildStatusMessage(const char *status) {
   int offset = snprintf(_statusBuf, STATUS_BUF_SIZE, "{\"status\":\"%s\"", status);
+
+  // Add bridge source mode
+  const char *bridge_source_str;
+  uint8_t bridge_src = _prefs->bridge_pkt_src;
+  if ((bridge_src & BRIDGE_SOURCE_RX) && (bridge_src & BRIDGE_SOURCE_TX)) {
+    bridge_source_str = "both";
+  } else if (bridge_src & BRIDGE_SOURCE_RX) {
+    bridge_source_str = "rx";
+  } else if (bridge_src & BRIDGE_SOURCE_TX) {
+    bridge_source_str = "tx";
+  } else {
+    bridge_source_str = "none";
+  }
+  offset += snprintf(_statusBuf + offset, STATUS_BUF_SIZE - offset, ",\"bridge_source\":\"%s\"", bridge_source_str);
 
   // Add uptime if millisecond clock available
   if (_ms) {
@@ -199,7 +214,10 @@ void MQTTBridge::loop() {
       }
       snprintf(statusTopic, sizeof(statusTopic), "%s/%s", mqtt_status_topic, pubkeyHex);
 
-      if (_mqttClient.publish(statusTopic, buildStatusMessage("online"), true)) {
+      // Set status based on bridge source setting
+      const char *status = (_prefs->bridge_pkt_src != 0) ? "online" : "not-bridging";
+
+      if (_mqttClient.publish(statusTopic, buildStatusMessage(status), true)) {
         MQTT_DEBUG_PRINTLN("Published periodic status update");
       } else {
         MQTT_DEBUG_PRINTLN("Periodic status publish failed");
