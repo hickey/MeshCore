@@ -74,10 +74,36 @@ public:
   bool reconnect();
   void setMesh(mesh::Mesh *mesh) { _mesh = mesh; }
 
+  template<typename RadioDriverType>
+  void setRadioDriver(RadioDriverType *driver) {
+    _radio_driver = (void*)driver;
+    _getPacketsRecv = [](void* d) { return ((RadioDriverType*)d)->getPacketsRecv(); };
+    _getPacketsSent = [](void* d) { return ((RadioDriverType*)d)->getPacketsSent(); };
+    _getPacketsRecvErrors = [](void* d) { return ((RadioDriverType*)d)->getPacketsRecvErrors(); };
+    _getLastRSSI = [](void* d) { return ((RadioDriverType*)d)->getLastRSSI(); };
+    _getLastSNR = [](void* d) { return ((RadioDriverType*)d)->getLastSNR(); };
+  }
+
+  void setMillisecondClock(mesh::MillisecondClock *ms) { _ms = ms; }
+  void setRadio(mesh::Radio *radio) { _radio = radio; }
+
+  const char* buildStatusMessage(const char *status);
+
 private:
   static MQTTBridge *_instance;
 
   mesh::Mesh *_mesh;
+  mesh::MillisecondClock *_ms;
+  mesh::Radio *_radio;
+  void *_radio_driver;
+
+  // Type-erased function pointers for radio driver stats
+  uint32_t (*_getPacketsRecv)(void*);
+  uint32_t (*_getPacketsSent)(void*);
+  uint32_t (*_getPacketsRecvErrors)(void*);
+  int16_t (*_getLastRSSI)(void*);
+  float (*_getLastSNR)(void*);
+
   WiFiClient _wifiClient;
   PubSubClient _mqttClient;
   unsigned long _lastReconnectAttempt;
@@ -89,6 +115,10 @@ private:
   // Buffer sized for maximum hex-encoded mesh packet
   static constexpr size_t HEX_BUF_SIZE = (MAX_TRANS_UNIT + 1) * 2 + 1;
   char _hexBuf[HEX_BUF_SIZE];
+
+  // Buffer for status messages
+  static constexpr size_t STATUS_BUF_SIZE = 512;
+  char _statusBuf[STATUS_BUF_SIZE];
 
   static void mqttCallback(char *topic, uint8_t *payload, unsigned int length);
   void onMqttMessage(char *topic, uint8_t *payload, unsigned int length);
