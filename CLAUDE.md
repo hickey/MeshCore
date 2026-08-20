@@ -136,9 +136,27 @@ Same frame format as RS232Bridge, carried over a WiFi TCP socket. Listens on the
 
 **MQTTBridge** (`WITH_MQTT_BRIDGE`) — `src/helpers/bridges/MQTTBridge.h/.cpp`:
 
-Runs over WiFi + MQTT instead of a wired/RF sideband. Packets are hex-encoded as uppercase ASCII (no magic header, length field, or checksum — MQTT's own transport handles integrity) and published/subscribed on a single topic (`MQTT_TOPIC`). Uses `PubSubClient` and requires `WiFi.h`; WiFi must be started (via `WIFI_SSID`/`WIFI_PWD` build defines, or manually before `bridge.begin()`) since the bridge only attempts to connect to the broker once WiFi is associated, and retries every 5s in `loop()` if disconnected. The MQTT client ID is derived from the node's own pubkey prefix (`meshcore-mqtt-bridge-<hex6>`). Like the other bridges, `SimpleMeshTables` (`_seen_packets`) suppresses re-publishing/re-injecting packets already seen, which also keeps a node from re-processing its own publish via its own subscription.
+Runs over WiFi + MQTT instead of a wired/RF sideband. Packets are hex-encoded as uppercase ASCII (no magic header, length field, or checksum — MQTT's own transport handles integrity) and published/subscribed on a single topic (`MQTT_PACKET_TOPIC`). Uses `PubSubClient` and requires `WiFi.h`; WiFi must be started (via `WIFI_SSID`/`WIFI_PWD` build defines, or manually before `bridge.begin()`) since the bridge only attempts to connect to the broker once WiFi is associated, and retries every 5s in `loop()` if disconnected. The MQTT client ID is derived from the node's own pubkey prefix (`meshcore-mqtt-bridge-<hex6>`). Like the other bridges, `SimpleMeshTables` (`_seen_packets`) suppresses re-publishing/re-injecting packets already seen, which also keeps a node from re-processing its own publish via its own subscription.
 
-Configuration build defines: `MQTT_HOST` (required), `MQTT_PORT` (default 1883), `MQTT_USERNAME`/`MQTT_PASSWORD` (optional), `MQTT_TOPIC` (default `meshcore/packets`), `MQTT_DEBUG`. `mqtt.host`/`mqtt.port`/`mqtt.topic` can also be changed at runtime via CLI (`set mqtt.host <host>`, etc.) — each change tears down and reinitializes the MQTT client (`end()` → `initialize()` → `reconnect()`).
+Configuration build defines: `MQTT_HOST` (required), `MQTT_PORT` (default 1883), `MQTT_USERNAME`/`MQTT_PASSWORD` (optional), `MQTT_PACKET_TOPIC` (default `meshcore/bridge/default/packets`), `MQTT_STATUS_TOPIC` (default `meshcore/bridge/default/status`), `MQTT_STATUS_INTERVAL` (default 60 seconds), `MQTT_DEBUG`. `mqtt.host`/`mqtt.port`/`mqtt.packet_topic`/`mqtt.status_topic` can also be changed at runtime via CLI (`set mqtt.host <host>`, etc.) — each change tears down and reinitializes the MQTT client (`end()` → `initialize()` → `reconnect()`).
+
+When connecting to the MQTT broker, the bridge publishes a status message to `MQTT_STATUS_TOPIC/<pubkey_hex>` (e.g., `meshcore/bridge/default/status/A1B2C3D4...`) with the retain flag set. The status is then republished periodically at the interval defined by `MQTT_STATUS_INTERVAL` (default 60 seconds). An MQTT Last Will and Testament (LWT) is also configured to publish `{"status":"offline"}` to the same topic when the client disconnects unexpectedly.
+
+The online status message includes comprehensive statistics:
+- `status`: "online" (when bridge_source is non-zero) or "not-bridging" (when bridge_source is 0)
+- `bridge_source`: "rx", "tx", "both", or "none"
+- `uptime_secs`: Node uptime in seconds
+- `tx_air_secs`, `rx_air_secs`: Total transmit and receive airtime in seconds
+- `tx_packets`, `rx_packets`: Total packets sent and received
+- `tx_flood`, `tx_direct`: Flood and direct packets sent
+- `rx_flood`, `rx_direct`: Flood and direct packets received
+- `dup_flood`, `dup_direct`: Duplicate flood and direct packets detected
+- `noise_floor`: Current noise floor (dBm)
+- `last_rssi`: Last received signal strength (dBm)
+- `last_snr`: Last signal-to-noise ratio
+- `rx_errors`: Received packet errors
+- `tx_queue_len`: Current transmit queue length
+- `clock`: Unix timestamp from RTC
 
 #### Zero-hop advert re-transmission
 
@@ -183,6 +201,8 @@ build_flags = ${env.build_flags}
 build_flags = ${env.build_flags}
   -DWITH_MQTT_BRIDGE=1
   -DMQTT_HOST='"mqtt.example.com"'
+  -DMQTT_PACKET_TOPIC='"meshcore/bridge/mydomain/packets"'
+  -DMQTT_STATUS_TOPIC='"meshcore/bridge/mydomain/status"'
   -DWIFI_SSID='"myssid"'
   -DWIFI_PWD='"mypasswd"'
 lib_deps = ${env.lib_deps}
@@ -221,14 +241,14 @@ Same framing as physical `companion_radio` boards, just over TCP instead of BLE/
 ### How it talks to the MeshCore network
 
 `MQTTRadio` (`src/helpers/linux/MQTTRadio.h/.cpp`) implements the `mesh::Radio` interface and substitutes for the LoRa driver used on real hardware:
-- Raw MeshCore packets are hex-encoded (uppercase ASCII) and published/subscribed on a **single shared MQTT topic** (`MQTT_TOPIC`) — there's no per-destination routing at the MQTT layer, every node on the topic sees every packet, same as a shared-air LoRa channel.
+- Raw MeshCore packets are hex-encoded (uppercase ASCII) and published/subscribed on a **single shared MQTT topic** (`MQTT_PACKET_TOPIC`) — there's no per-destination routing at the MQTT layer, every node on the topic sees every packet, same as a shared-air LoRa channel.
 - Uses `libmosquitto`, with its own network loop thread (`mosquitto_loop_start`); inbound messages land in a small ring buffer (`recvRaw()` drains it) so the mesh loop stays non-blocking.
 - Self-echo suppression: outbound packet hashes (FNV-1a) are tracked in a ring (`markSent`/`wasSentByUs`) so a node doesn't reprocess its own publish when it comes back via its own subscription.
 - `getEstAirtimeFor()` fabricates a LoRa-like airtime estimate (`50 + len*3` ms) purely so the mesh scheduler's retransmission/backoff timing behaves like it would on real radio — MQTT delivery itself is near-instant.
 - `packetScore()` always returns a perfect score (1.0) — no fading/interference simulation.
 - No actual RF params exist; `setParams`/`setTxPower`/`setRxBoostedGainMode` are no-ops kept only to satisfy the `mesh::Radio` interface used by `CommonCLI`.
 
-Practically: every virt_companion (and any bridge/gateway that also speaks this hex-over-MQTT convention) subscribed to the same `MQTT_TOPIC` forms one mesh "radio domain," equivalent to a set of physical nodes sharing a LoRa frequency/channel.
+Practically: every virt_companion (and any bridge/gateway that also speaks this hex-over-MQTT convention) subscribed to the same `MQTT_PACKET_TOPIC` forms one mesh "radio domain," equivalent to a set of physical nodes sharing a LoRa frequency/channel.
 
 ### Linux shims (`examples/virt_companion/shims/`)
 
