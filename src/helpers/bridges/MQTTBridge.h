@@ -14,6 +14,10 @@
   #define MQTT_STATUS_TOPIC "meshcore/bridge/default/status"
 #endif
 
+#ifndef MQTT_STATUS_INTERVAL
+  #define MQTT_STATUS_INTERVAL 60
+#endif
+
 // MQTT_MAX_PACKET_SIZE must fit: MQTT headers + topic + hex payload
 // Max hex payload = (MAX_TRANS_UNIT+1)*2 = 370 chars; add topic and MQTT overhead
 #ifndef MQTT_MAX_PACKET_SIZE
@@ -45,6 +49,7 @@
  *   MQTT_PASSWORD         — broker password (optional)
  *   MQTT_PACKET_TOPIC     — topic to publish/subscribe (default "meshcore/bridge/default/packets")
  *   MQTT_STATUS_TOPIC     — topic to publish status (default "meshcore/bridge/default/status")
+ *   MQTT_STATUS_INTERVAL  — status publish interval in seconds (default 60)
  *   MQTT_DEBUG            — set to 1 to enable debug output on Serial
  *
  * WiFi must be configured separately via WIFI_SSID / WIFI_PWD build defines,
@@ -107,6 +112,7 @@ private:
   WiFiClient _wifiClient;
   PubSubClient _mqttClient;
   unsigned long _lastReconnectAttempt;
+  unsigned long _lastStatusPublish;
   const uint8_t *_pubKey;
 
   char _mqtt_username[32];
