@@ -1165,15 +1165,29 @@ region save
 
 ---
 
-#### Set MQTT topic (MQTT bridge only)
+#### Set MQTT packet topic (MQTT bridge only)
 **Usage:**
-- `get mqtt.topic`
-- `set mqtt.topic <new_topic>`
+- `get mqtt.packet.topic`
+- `set mqtt.packet.topic <topic>`
+- `get mqtt.topic` *(legacy alias)*
+- `set mqtt.topic <topic>` *(legacy alias)*
 
 **Parameters:**
-- `new_topic`: MQTT topic for publication and subscription
+- `topic`: MQTT topic for mesh packet publication and subscription
 
-**Default:** Set at compile time. If changed reverts to compile time value.
+**Default:** Set at compile time via `MQTT_PACKET_TOPIC`. If changed reverts to compile time value on reboot.
+
+---
+
+#### Set MQTT status topic (MQTT bridge only)
+**Usage:**
+- `get mqtt.status.topic`
+- `set mqtt.status.topic <topic>`
+
+**Parameters:**
+- `topic`: MQTT topic base for node status messages. Each node publishes to `<topic>/<pubkey_hex>`
+
+**Default:** Set at compile time via `MQTT_STATUS_TOPIC`. If changed reverts to compile time value on reboot.
 
 ---
 

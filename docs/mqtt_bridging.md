@@ -157,8 +157,8 @@ If your firmware includes `CommonCLI`, MQTT settings can be changed at runtime:
 ```
 set mqtt.host mqtt.newbroker.com
 set mqtt.port 1883
-set mqtt.packet_topic meshcore/bridge/domain/packets
-set mqtt.status_topic meshcore/bridge/domain/status
+set mqtt.packet.topic meshcore/bridge/domain/packets
+set mqtt.status.topic meshcore/bridge/domain/status
 ```
 
 Each change tears down and reinitializes the MQTT client connection.

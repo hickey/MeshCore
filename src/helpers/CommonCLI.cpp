@@ -797,7 +797,7 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
     strcpy(reply, "OK");
   } else if (memcmp(config, "mqtt.topic ", 11) == 0) {
     static_cast<MQTTBridge*>(_bridge)->end();
-    StrHelper::strncpy(static_cast<MQTTBridge*>(_bridge)->mqtt_topic,
+    StrHelper::strncpy(static_cast<MQTTBridge*>(_bridge)->mqtt_packet_topic,
                        &config[11], 64);
     static_cast<MQTTBridge*>(_bridge)->initialize();
     if (static_cast<MQTTBridge*>(_bridge)->reconnect()) {
@@ -805,6 +805,23 @@ void CommonCLI::handleSetCmd(uint32_t sender_timestamp, char* command, char* rep
     } else {
       strcpy(reply, "Error: failed to subscribe to new topic");
     }
+  } else if (memcmp(config, "mqtt.packet.topic ", 18) == 0) {
+    static_cast<MQTTBridge*>(_bridge)->end();
+    StrHelper::strncpy(static_cast<MQTTBridge*>(_bridge)->mqtt_packet_topic,
+                       &config[18], 64);
+    static_cast<MQTTBridge*>(_bridge)->initialize();
+    if (static_cast<MQTTBridge*>(_bridge)->reconnect()) {
+      strcpy(reply, "OK");
+    } else {
+      strcpy(reply, "Error: failed to subscribe to new topic");
+    }
+  } else if (memcmp(config, "mqtt.status.topic ", 18) == 0) {
+    static_cast<MQTTBridge*>(_bridge)->end();
+    StrHelper::strncpy(static_cast<MQTTBridge*>(_bridge)->mqtt_status_topic,
+                       &config[18], 64);
+    static_cast<MQTTBridge*>(_bridge)->initialize();
+    static_cast<MQTTBridge*>(_bridge)->reconnect();
+    strcpy(reply, "OK");
 #endif
   } else if (memcmp(config, "adc.multiplier ", 15) == 0) {
     _prefs->adc_multiplier = atof(&config[15]);
@@ -981,9 +998,13 @@ void CommonCLI::handleGetCmd(uint32_t sender_timestamp, char* command, char* rep
   } else if (memcmp(config, "mqtt.host", 9) == 0) {
     sprintf(reply, "> %s", static_cast<MQTTBridge*>(_bridge)->mqtt_host);
   } else if (memcmp(config, "mqtt.port", 9) == 0) {
-    sprintf(reply, "> %s", static_cast<MQTTBridge*>(_bridge)->mqtt_port);
+    sprintf(reply, "> %u", static_cast<MQTTBridge*>(_bridge)->mqtt_port);
   } else if (memcmp(config, "mqtt.topic", 10) == 0) {
-    sprintf(reply, "> %s", static_cast<MQTTBridge*>(_bridge)->mqtt_topic);
+    sprintf(reply, "> %s", static_cast<MQTTBridge*>(_bridge)->mqtt_packet_topic);
+  } else if (memcmp(config, "mqtt.packet.topic", 17) == 0) {
+    sprintf(reply, "> %s", static_cast<MQTTBridge*>(_bridge)->mqtt_packet_topic);
+  } else if (memcmp(config, "mqtt.status.topic", 17) == 0) {
+    sprintf(reply, "> %s", static_cast<MQTTBridge*>(_bridge)->mqtt_status_topic);
 #endif
   } else if (memcmp(config, "bootloader.ver", 14) == 0) {
   #ifdef NRF52_PLATFORM
