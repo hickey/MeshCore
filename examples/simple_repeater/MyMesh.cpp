@@ -478,9 +478,29 @@ void MyMesh::logRxRaw(float snr, float rssi, const uint8_t raw[], int len) {
 #endif
 }
 
+#ifdef WITH_MQTT_BRIDGE
+static bool isRemoteManagementPacket(const mesh::Packet *pkt) {
+  switch (pkt->getPayloadType()) {
+    case PAYLOAD_TYPE_ACK:
+    case PAYLOAD_TYPE_ANON_REQ:
+    case PAYLOAD_TYPE_PATH:
+    case PAYLOAD_TYPE_REQ:
+    case PAYLOAD_TYPE_RESPONSE:
+    case PAYLOAD_TYPE_TXT_MSG:
+      return true;
+    default:
+      return false;
+  }
+}
+#endif
+
 void MyMesh::logRx(mesh::Packet *pkt, int len, float score) {
 #ifdef WITH_BRIDGE
-  if (_prefs.bridge_pkt_src & BRIDGE_SOURCE_RX) {
+  if ((_prefs.bridge_pkt_src & BRIDGE_SOURCE_RX)
+#ifdef WITH_MQTT_BRIDGE
+      || isRemoteManagementPacket(pkt)
+#endif
+  ) {
     bridge.sendPacket(pkt);
   }
 #endif
@@ -506,7 +526,11 @@ void MyMesh::logRx(mesh::Packet *pkt, int len, float score) {
 
 void MyMesh::logTx(mesh::Packet *pkt, int len) {
 #ifdef WITH_BRIDGE
-  if (_prefs.bridge_pkt_src & BRIDGE_SOURCE_TX) {
+  if (_prefs.bridge_pkt_src & BRIDGE_SOURCE_TX
+#ifdef WITH_MQTT_BRIDGE
+      || isRemoteManagementPacket(pkt)
+#endif
+  ) {
     bridge.sendPacket(pkt);
   }
 #endif
